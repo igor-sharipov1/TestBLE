@@ -2,16 +2,13 @@ package com.example.myapplication
 
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
-import com.example.myapplication.R
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import java.lang.reflect.Method
 
@@ -38,11 +35,11 @@ class DeviceAdapter(
             itemView.findViewById<TextView>(R.id.deviceMacAddress).text = device?.address
             itemView.findViewById<TextView>(R.id.deviceNameCharacteristic).text = device?.name
             itemView.setOnClickListener {
-                val class1 = Class.forName("android.bluetooth.BluetoothDevice")
-                val createBondMethod: Method = class1.getMethod("createBond")
-                createBondMethod.invoke(device)
-                parentActivity?.findViewById<TextView>(R.id.deviceName)?.text =  device?.name
-                getCurrentBluetoothConnection()
+                device?.createBond()
+                if (parentActivity is MainActivity) {
+                    parentActivity.getConnectData(device)
+                }
+              //  getCurrentBluetoothConnection()
             }
 
         }

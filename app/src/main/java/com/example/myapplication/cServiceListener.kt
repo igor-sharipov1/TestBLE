@@ -22,7 +22,7 @@ class cServiceListener(private val context : Context) : ServiceListener {
         val Devices = bluetoothProfile.getDevicesMatchingConnectionStates(states)
         for (loop in Devices) {
             Log.i("myTag", loop.name)
-            Toast.makeText(context, "Connected to ${loop.name}",Toast.LENGTH_SHORT).show()
+            //Toast.makeText(context, "Connected to ${loop.name}",Toast.LENGTH_SHORT).show()
            // (context as Activity).findViewById<TextView>(R.id.deviceName).text =  loop.name
             val gatt = loop.connectGatt(context, false, mBluetoothGattCallback)
             val log = gatt.getService(UUID.fromString("00002a29-0000-1000-8000-00805f9b34fb"))
@@ -55,6 +55,7 @@ class cServiceListener(private val context : Context) : ServiceListener {
         ) {
             if (status == BluetoothGatt.GATT_SUCCESS){
                 Log.d("characteristic", characteristic?.uuid.toString())
+                Toast.makeText(context, characteristic?.uuid.toString(), Toast.LENGTH_LONG).show()
             }
         }
     }
