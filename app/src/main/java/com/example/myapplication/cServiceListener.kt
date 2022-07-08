@@ -27,7 +27,7 @@ class cServiceListener(private val context : Context) : ServiceListener {
             val gatt = loop.connectGatt(context, false, mBluetoothGattCallback)
             val log = gatt.getService(UUID.fromString("00002a29-0000-1000-8000-00805f9b34fb"))
             Log.i("myCharacteristic", log.toString())
-            Toast.makeText(context, log.toString(), Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Manufacturer name: $log", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -55,7 +55,7 @@ class cServiceListener(private val context : Context) : ServiceListener {
         ) {
             if (status == BluetoothGatt.GATT_SUCCESS){
                 Log.d("characteristic", characteristic?.uuid.toString())
-                Toast.makeText(context, characteristic?.uuid.toString(), Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Some characteristic ${characteristic?.uuid.toString()}", Toast.LENGTH_LONG).show()
             }
         }
     }
