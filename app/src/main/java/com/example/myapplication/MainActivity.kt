@@ -1,16 +1,21 @@
 package com.example.myapplication
 
+import android.Manifest
 import android.app.Activity
 import android.bluetooth.*
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
@@ -31,6 +36,7 @@ class MainActivity : AppCompatActivity() {
         instance = this
         //val btManager = baseContext.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         // getCurrentBluetoothConnection()
+        checkPermission()
         mDeviceAdapter = DeviceAdapter(mDeviceList, applicationContext, instance)
         val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
         registerReceiver(receiver, filter)
@@ -105,21 +111,28 @@ class MainActivity : AppCompatActivity() {
 
     private fun setUpBondedDevice(){
         findViewById<TextView>(R.id.deviceName).text = mBluetoothDevice?.name
-        val flag = mBluetoothAdapter?.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothProfile.STATE_DISCONNECTED
-        mBluetoothAdapter?.getProfileProxy(instance, cServiceListener(applicationContext), BluetoothProfile.GATT)
-      //  mBluetoothGatt = mBluetoothDevice?.connectGatt(this, false, mBluetoothGattCallback)
+       // val flag = mBluetoothAdapter?.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothProfile.STATE_DISCONNECTED
+       // mBluetoothAdapter?.getProfileProxy(instance, cServiceListener(applicationContext), BluetoothProfile.GATT)
+        mBluetoothGatt = mBluetoothDevice?.connectGatt(this, false, mBluetoothGattCallback)
     }
 
     private val mBluetoothGattCallback = object : BluetoothGattCallback() {
+
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.d("signal","Connected!")
+                runOnUiThread {
+                    Toast.makeText(applicationContext, "Successfully connected to ${gatt.device.name}", Toast.LENGTH_LONG).show()
+                }
             }
             else if (newState == BluetoothProfile.STATE_CONNECTING){
                 Log.d("signal","Connecting...")
             }
             else if (newState == BluetoothProfile.STATE_DISCONNECTED){
                 Log.d("signal","Disconnected(")
+                runOnUiThread {
+                    Toast.makeText(applicationContext, "Disconnected from device ${gatt.device.name}", Toast.LENGTH_LONG).show()
+                }
             }
         }
 
@@ -128,11 +141,57 @@ class MainActivity : AppCompatActivity() {
             characteristic: BluetoothGattCharacteristic?,
             status: Int
         ) {
+            runOnUiThread {
+                Toast.makeText(applicationContext, "onCharacteristicRead is called", Toast.LENGTH_LONG).show()
+            }
             if (status == BluetoothGatt.GATT_SUCCESS){
                 Log.d("characteristic", characteristic?.uuid.toString())
+                runOnUiThread {
+                    Toast.makeText(applicationContext, "Some characteristics ${characteristic?.getDescriptor(characteristic?.uuid)?.characteristic?.getStringValue(0)}", Toast.LENGTH_LONG).show()
+                }
+            }
+            else{
+                Log.d("characteristic", characteristic?.uuid.toString())
+                runOnUiThread {
+                    Toast.makeText(applicationContext, "Failed to read characteristics", Toast.LENGTH_LONG).show()
+                }
             }
         }
 
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?
+        ) {
+            runOnUiThread {
+                Toast.makeText(applicationContext, "onCharacteristicChanged is called", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            runOnUiThread {
+                Toast.makeText(applicationContext, "onCharacteristicWrite is called", Toast.LENGTH_LONG).show()
+            }
+        }
+
+    }
+
+    private fun checkPermission(){
+        when (PackageManager.PERMISSION_DENIED) {
+            ContextCompat.checkSelfPermission
+                (this, Manifest.permission.BLUETOOTH_SCAN) -> {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_SCAN), 101)
+            }
+            ContextCompat.checkSelfPermission
+                (this, Manifest.permission.BLUETOOTH_CONNECT) -> {
+                // You can directly ask for the permission.
+                // The registered ActivityResultCallback gets the result of this request.
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 101)
+            }
+        }
     }
 }
 
