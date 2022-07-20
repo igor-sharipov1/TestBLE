@@ -18,6 +18,9 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.yandex.metrica.YandexMetrica
+import com.yandex.metrica.YandexMetricaConfig
+import java.util.*
 
 
 class MainActivity : AppCompatActivity() {
@@ -27,11 +30,38 @@ class MainActivity : AppCompatActivity() {
     var instance: Activity? = null
     var mBluetoothDevice : BluetoothDevice? = null
     var mBluetoothGatt : BluetoothGatt? = null
+    var mBluetoothGattService : BluetoothGattService? = null
+    var mBluetoothGattCharacteristic : BluetoothGattCharacteristic? = null
     var mBluetoothAdapter : BluetoothAdapter? = null
-    //private val connectedDevice
+    var characteristic : BluetoothGattCharacteristic? = null
+    val API_key = "b8a153d2-467f-4336-991f-86547c468064"
+
+    private val commandQueue: Queue<Runnable>? = null
+    private val commandQueueBusy = false
+
+    private val GLUCOSE_SERVICE = UUID.fromString("00001808-0000-1000-8000-00805f9b34fb")
+    private val GLUCOSE_CHARACTERISTIC = UUID.fromString("00002a18-0000-1000-8000-00805f9b34fb")
+    private val CLIENT_CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+
+
+    private val DIS_SERVICE_UUID = UUID.fromString("0000180A-0000-1000-8000-00805f9b34fb")
+    private val MANUFACTURER_NAME_CHARACTERISTIC_UUID = UUID.fromString("00002A29-0000-1000-8000-00805f9b34fb")
+    private val MODEL_NUMBER_CHARACTERISTIC_UUID = UUID.fromString("00002A24-0000-1000-8000-00805f9b34fb")
+
+
+
+    private fun setCharact(characteristic: BluetoothGattCharacteristic?){
+        this.characteristic = characteristic
+        val flag = mBluetoothGatt?.readCharacteristic(this.characteristic)
+        val g = 7
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val config = YandexMetricaConfig.newConfigBuilder(API_key).build()
+        YandexMetrica.activate(applicationContext, config)
+        YandexMetrica.enableActivityAutoTracking(application);
         setContentView(R.layout.activity_main)
         instance = this
         //val btManager = baseContext.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
@@ -114,26 +144,49 @@ class MainActivity : AppCompatActivity() {
        // val flag = mBluetoothAdapter?.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothProfile.STATE_DISCONNECTED
        // mBluetoothAdapter?.getProfileProxy(instance, cServiceListener(applicationContext), BluetoothProfile.GATT)
         mBluetoothGatt = mBluetoothDevice?.connectGatt(this, false, mBluetoothGattCallback)
+
     }
 
     private val mBluetoothGattCallback = object : BluetoothGattCallback() {
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.d("signal","Connected!")
-                runOnUiThread {
-                    Toast.makeText(applicationContext, "Successfully connected to ${gatt.device.name}", Toast.LENGTH_LONG).show()
+            when (newState) {
+                BluetoothProfile.STATE_CONNECTED -> {
+                    val q : Boolean = gatt.discoverServices()
+                    Log.d("signal","Connected!")
+                }
+                BluetoothProfile.STATE_CONNECTING -> {
+                    Log.d("signal","Connecting...")
+                }
+                BluetoothProfile.STATE_DISCONNECTED -> {
+                    Log.d("signal","Disconnected(")
+                    runOnUiThread {
+                        Toast.makeText(applicationContext, "Disconnected from device ${gatt.device.name}", Toast.LENGTH_LONG).show()
+                    }
+                    gatt.close()
                 }
             }
-            else if (newState == BluetoothProfile.STATE_CONNECTING){
-                Log.d("signal","Connecting...")
-            }
-            else if (newState == BluetoothProfile.STATE_DISCONNECTED){
-                Log.d("signal","Disconnected(")
-                runOnUiThread {
-                    Toast.makeText(applicationContext, "Disconnected from device ${gatt.device.name}", Toast.LENGTH_LONG).show()
-                }
-            }
+        }
+
+        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+            super.onServicesDiscovered(gatt, status)
+            val service = gatt?.getService(GLUCOSE_SERVICE)
+            setCharact(service?.getCharacteristic(GLUCOSE_CHARACTERISTIC))
+           // val descriptor = b?.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
+           // descriptor?.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+           // gatt?.writeDescriptor(descriptor);
+           // val c = b?.uuid.toString()
+            //val c1 = b?.getDescriptor()
+           // val c2 = b?.instanceId
+           // val c3 = b?.permissions
+           // val c4 = b?.properties
+         //   val c5 = b?.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 2)
+
+          //  val b2 = gatt?.readCharacteristic(b)
+           // readChar(b,gatt)
+
+            return
+            //findViewById<TextView>(R.id.glucometerCharacteristic).text = b.toString()
         }
 
         override fun onCharacteristicRead(
@@ -141,13 +194,15 @@ class MainActivity : AppCompatActivity() {
             characteristic: BluetoothGattCharacteristic?,
             status: Int
         ) {
+            Log.d("onCharacteristicRead ", characteristic?.uuid.toString())
             runOnUiThread {
                 Toast.makeText(applicationContext, "onCharacteristicRead is called", Toast.LENGTH_LONG).show()
             }
             if (status == BluetoothGatt.GATT_SUCCESS){
                 Log.d("characteristic", characteristic?.uuid.toString())
                 runOnUiThread {
-                    Toast.makeText(applicationContext, "Some characteristics ${characteristic?.getDescriptor(characteristic?.uuid)?.characteristic?.getStringValue(0)}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(applicationContext, "GATT_SUCCESS", Toast.LENGTH_LONG).show()
+                    //Toast.makeText(applicationContext, "Some characteristics ${characteristic?.getDescriptor(characteristic?.uuid)?.characteristic?.getStringValue(0)}", Toast.LENGTH_LONG).show()
                 }
             }
             else{
@@ -158,13 +213,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        @Synchronized
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt?,
-            characteristic: BluetoothGattCharacteristic?
+            characteristic: BluetoothGattCharacteristic
         ) {
-            runOnUiThread {
-                Toast.makeText(applicationContext, "onCharacteristicChanged is called", Toast.LENGTH_LONG).show()
-            }
+            val dataInput = characteristic.value
         }
 
         override fun onCharacteristicWrite(
@@ -177,6 +231,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    }
+
+    private fun readChar(characteristic : BluetoothGattCharacteristic?, gatt : BluetoothGatt?){
+        val flag = mBluetoothGatt?.readCharacteristic(characteristic)
+        val q = 5
     }
 
     private fun checkPermission(){
@@ -192,6 +251,11 @@ class MainActivity : AppCompatActivity() {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 101)
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mBluetoothGatt?.close()
     }
 }
 
