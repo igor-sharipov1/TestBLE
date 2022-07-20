@@ -3,12 +3,15 @@ package com.example.myapplication
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.*
+import android.bluetooth.BluetoothGattCharacteristic.PROPERTY_NOTIFY
 import android.content.BroadcastReceiver
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
 import android.util.Log
 import android.widget.Button
 import android.widget.TextView
@@ -21,6 +24,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.yandex.metrica.YandexMetrica
 import com.yandex.metrica.YandexMetricaConfig
 import java.util.*
+import kotlin.collections.ArrayList
+import kotlin.experimental.and
 
 
 class MainActivity : AppCompatActivity() {
@@ -36,8 +41,12 @@ class MainActivity : AppCompatActivity() {
     var characteristic : BluetoothGattCharacteristic? = null
     val API_key = "b8a153d2-467f-4336-991f-86547c468064"
 
-    private val commandQueue: Queue<Runnable>? = null
-    private val commandQueueBusy = false
+    private var commandQueue: Queue<Runnable>? = object : LinkedList<Runnable>(){}
+    private var commandQueueBusy = false
+    private var nrTries = 0
+    private var MAX_TRIES = 10
+    private var isRetrying = false
+    val bleHandler = Handler()
 
     private val GLUCOSE_SERVICE = UUID.fromString("00001808-0000-1000-8000-00805f9b34fb")
     private val GLUCOSE_CHARACTERISTIC = UUID.fromString("00002a18-0000-1000-8000-00805f9b34fb")
@@ -170,8 +179,48 @@ class MainActivity : AppCompatActivity() {
 
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
             super.onServicesDiscovered(gatt, status)
-            val service = gatt?.getService(GLUCOSE_SERVICE)
-            setCharact(service?.getCharacteristic(GLUCOSE_CHARACTERISTIC))
+            val services = gatt?.services
+            for (service in services!!) {
+                for (characteristic in service.characteristics) {
+                    Log.d("characteristic - ", characteristic.uuid.toString())
+                    if (characteristic.value == null) {
+                        Log.d("value - ", "null")
+                    } else {
+                        Log.d("value - ", characteristic.value.toString())
+                    }
+                    if (!characteristic.uuid.toString().equals("00002a00-0000-1000-8000-00805f9b34fb") &&
+                        !characteristic.uuid.toString().equals("00002a01-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a04-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a23-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a24-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a25-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a26-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a28-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a29-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a2a-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a50-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00002a2b-0000-1000-8000-00805f9b34fb")&&
+                        !characteristic.uuid.toString().equals("00001021-0002-11e2-9e96-0800200c9a66"))
+                  //  Log.d("readable - ", gatt.readCharacteristic(characteristic).toString())
+                    if (characteristic.uuid.toString().equals("00002a52-0000-1000-8000-00805f9b34fb")){
+
+                        val descriptor = characteristic?.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
+                        descriptor?.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                        gatt?.writeDescriptor(descriptor);
+                        gatt.setCharacteristicNotification(characteristic, false)
+                    }
+                    Log.d("writable - ", gatt.writeCharacteristic(characteristic).toString())
+                    Log.d("--------------- ", "aboba")
+                }
+            }
+            //setNotifySensor(gatt!!)
+       //     val flag1 = gatt?.writeCharacteristic(service?.getCharacteristic(GLUCOSE_CHARACTERISTIC))
+         //  val flag2 = gatt?.setCharacteristicNotification(service?.getCharacteristic(GLUCOSE_CHARACTERISTIC), true)
+        //    val flag3 = gatt?.readCharacteristic(service?.getCharacteristic(GLUCOSE_CHARACTERISTIC))
+
+
+
+            //readCharacteristic(service?.getCharacteristic(GLUCOSE_CHARACTERISTIC))
            // val descriptor = b?.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
            // descriptor?.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
            // gatt?.writeDescriptor(descriptor);
@@ -189,12 +238,26 @@ class MainActivity : AppCompatActivity() {
             //findViewById<TextView>(R.id.glucometerCharacteristic).text = b.toString()
         }
 
+
+        private fun setNotifySensor(gatt: BluetoothGatt) {
+            val characteristic = gatt.getService(GLUCOSE_SERVICE)
+                .getCharacteristic(GLUCOSE_CHARACTERISTIC)
+            gatt.setCharacteristicNotification(characteristic, false)
+            val desc = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
+            Log.i("BLE", "Descriptor is $desc") // this is not null
+            desc.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+            Log.i("BLE", "Descriptor write: " + gatt.writeDescriptor(desc)) // returns true
+        }
+
         override fun onCharacteristicRead(
             gatt: BluetoothGatt?,
             characteristic: BluetoothGattCharacteristic?,
             status: Int
         ) {
             Log.d("onCharacteristicRead ", characteristic?.uuid.toString())
+            val b = characteristic!!.value
+            val f = ArrayList<Short>()
+            val i = byteToHexString(b)
             runOnUiThread {
                 Toast.makeText(applicationContext, "onCharacteristicRead is called", Toast.LENGTH_LONG).show()
             }
@@ -213,7 +276,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        @Synchronized
+        fun byteToHexString(data: ByteArray?): String? {
+            val buf = StringBuffer()
+            if (data != null) {
+                for (i in data.indices) {
+                    var halfbyte: Int = data[i].toInt() ushr 4 and 0x0F
+                    var two_halfs = 0
+                    do {
+                        if (0 <= halfbyte && halfbyte <= 9) {
+                            buf.append(('0'.toInt() + halfbyte).toChar())
+                        } else {
+                            buf.append(('a'.toInt() + (halfbyte - 10)).toChar())
+                        }
+                        halfbyte = (data[i] and 0x0F).toInt()
+                    } while (two_halfs++ < 1)
+                    buf.append(' ')
+                }
+            }
+            return buf.toString()
+        }
+
+
+
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt?,
             characteristic: BluetoothGattCharacteristic
@@ -231,6 +315,90 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    }
+
+    fun readCharacteristic(characteristic: BluetoothGattCharacteristic?): Boolean {
+        if (mBluetoothGatt == null) {
+            Log.e(TAG, "ERROR: Gatt is 'null', ignoring read request")
+            return false
+        }
+
+        // Check if characteristic is valid
+        if (characteristic == null) {
+            Log.e(TAG, "ERROR: Characteristic is 'null', ignoring read request")
+            return false
+        }
+
+        // Check if this characteristic actually has READ property
+        if (characteristic.properties and PROPERTY_NOTIFY == 0) {
+            Log.e(TAG, "ERROR: Characteristic cannot be read")
+            return false
+        }
+
+        // Enqueue the read command now that all checks have been passed
+        val result = commandQueue?.add(Runnable {
+            mBluetoothGatt?.setCharacteristicNotification(characteristic, true);
+            val descriptor = characteristic?.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
+            descriptor?.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE;
+            mBluetoothGatt?.writeDescriptor(descriptor);
+
+        })
+        if (result != false) {
+            nextCommand()
+        } else {
+            Log.e(TAG, "ERROR: Could not enqueue read characteristic command")
+        }
+        return result!!
+    }
+
+    private fun nextCommand() {
+        // If there is still a command being executed then bail out
+        if (commandQueueBusy) {
+            return
+        }
+
+        // Check if we still have a valid gatt object
+        if (mBluetoothGatt == null) {
+            commandQueue!!.clear()
+            commandQueueBusy = false
+            return
+        }
+
+        // Execute the next command in the queue
+        if (commandQueue!!.size > 0) {
+            val bluetoothCommand = commandQueue?.peek()
+            commandQueueBusy = true
+            nrTries = 0
+            bleHandler.post(Runnable {
+                try {
+                    bluetoothCommand?.run()
+                } catch (ex: Exception) {
+
+                }
+            })
+        }
+    }
+
+    private fun completedCommand() {
+        commandQueueBusy = false
+        isRetrying = false
+        commandQueue!!.poll()
+        nextCommand()
+    }
+
+    private fun retryCommand() {
+        commandQueueBusy = false
+        val currentCommand = commandQueue!!.peek()
+        if (currentCommand != null) {
+            if (nrTries >= MAX_TRIES) {
+                // Max retries reached, give up on this one and proceed
+                Log.v(TAG, "Max number of tries reached")
+                commandQueue?.poll()
+            } else {
+                isRetrying = true
+            }
+        }
+        nextCommand()
     }
 
     private fun readChar(characteristic : BluetoothGattCharacteristic?, gatt : BluetoothGatt?){
