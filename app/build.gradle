@@ -33,6 +33,9 @@ android {
 }
 
 dependencies {
+    implementation 'no.nordicsemi.android:ble-livedata:2.5.1'
+    implementation 'no.nordicsemi.android:ble-common:2.5.1'
+    implementation 'no.nordicsemi.android:ble-ktx:2.5.1'
     implementation 'com.yandex.android:mobmetricalib:5.0.0'
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation 'androidx.core:core-ktx:1.8.0'
