@@ -39,7 +39,7 @@ class DeviceAdapter(
                 if (parentActivity is MainActivity) {
                     parentActivity.getConnectData(device)
                 }
-              //  getCurrentBluetoothConnection()
+                //  getCurrentBluetoothConnection()
             }
 
         }

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.nfc.NfcAdapter.EXTRA_DATA
 import android.os.Bundle
 import android.os.Handler
 import android.util.Log
@@ -48,7 +49,8 @@ class MainActivity : AppCompatActivity() {
     private val GLUCOSE_CHARACTERISTIC = UUID.fromString("00002a18-0000-1000-8000-00805f9b34fb")
     private val CLIENT_CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     private val RECORDS_CHARACTERISTIC = UUID.fromString("00002a52-0000-1000-8000-00805f9b34fb")
-
+    private val GLUCOSE_FEATURE = UUID.fromString("00002a51-0000-1000-8000-00805f9b34fb")
+    private val CONTEXT_CHARACTERISTIC = UUID.fromString("00002a34-0000-1000-8000-00805f9b34fb")
 
     private val DIS_SERVICE_UUID = UUID.fromString("0000180A-0000-1000-8000-00805f9b34fb")
     private val MANUFACTURER_NAME_CHARACTERISTIC_UUID = UUID.fromString("00002A29-0000-1000-8000-00805f9b34fb")
@@ -146,8 +148,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun setUpBondedDevice(){
         findViewById<TextView>(R.id.deviceName).text = mBluetoothDevice?.name
-       // val flag = mBluetoothAdapter?.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothProfile.STATE_DISCONNECTED
-       // mBluetoothAdapter?.getProfileProxy(instance, cServiceListener(applicationContext), BluetoothProfile.GATT)
+        // val flag = mBluetoothAdapter?.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothProfile.STATE_DISCONNECTED
+        // mBluetoothAdapter?.getProfileProxy(instance, cServiceListener(applicationContext), BluetoothProfile.GATT)
         mBluetoothGatt = mBluetoothDevice?.connectGatt(this, false, mBluetoothGattCallback)
 
     }
@@ -158,6 +160,7 @@ class MainActivity : AppCompatActivity() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
+                   // gatt.requestMtu(256)
                     val q : Boolean = gatt.discoverServices()
                     Log.d("signal","Connected!")
                 }
@@ -178,59 +181,40 @@ class MainActivity : AppCompatActivity() {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.w("BLE", "onServicesDiscovered ")
                 val services = gatt.services
-                for (service in services!!){
-                    for (characteristic in service.characteristics)
-                        for (descriptor in characteristic.descriptors) {
-                            mBluetoothGatt!!.setCharacteristicNotification(characteristic, true)
+                for (service in services){
+                    val serviceUuid = service.uuid
+                    if (serviceUuid.equals(GLUCOSE_SERVICE)) {
+                        for (characteristic in service.characteristics) {
+                            if (characteristic.uuid == GLUCOSE_CHARACTERISTIC) {
+                                val charGM =
+                                    gatt.getService(UUID.fromString("00001808-0000-1000-8000-00805f9b34fb"))
+                                        .getCharacteristic(GLUCOSE_CHARACTERISTIC)
+                                gatt.setCharacteristicNotification(charGM, true)
 
-                            descriptor.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-                            mBluetoothGatt!!.writeDescriptor(descriptor)
+                                val descGM =
+                                    charGM.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
+                                descGM.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                                val flag = gatt.writeDescriptor(descGM)
+                                Log.d("Glucose Character desc", flag.toString())
+
+                            }
                         }
+                    }
                 }
-                //characteristic = gatt.getService(GLUCOSE_SERVICE).getCharacteristic(RECORDS_CHARACTERISTIC)
-                //setNotifySensor(gatt)
+
+               // val flag = gatt.writeCharacteristic(characteristic)
+
+
             }
         }
 
-        private fun setNotifySensor(gatt: BluetoothGatt) {
-            if (mBluetoothAdapter == null || mBluetoothGatt == null) {
-                return
-            }
-            mBluetoothGatt!!.setCharacteristicNotification(characteristic, true)
-            try {
-                Thread.sleep(200)
-            } catch (e: InterruptedException) {
-                e.printStackTrace()
-            }
-            val descriptor = characteristic!!.getDescriptor(
-                UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-            )
-            try {
-                Thread.sleep(200)
-            } catch (e: InterruptedException) {
-                e.printStackTrace()
-            }
-            descriptor.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-            try {
-                Thread.sleep(200)
-            } catch (e: InterruptedException) {
-                e.printStackTrace()
-            }
-            mBluetoothGatt!!.writeDescriptor(descriptor)
-            try {
-                Thread.sleep(200)
-            } catch (e: InterruptedException) {
-                e.printStackTrace()
-            }
-
-        }
 
         override fun onCharacteristicRead(
             gatt: BluetoothGatt?,
             characteristic: BluetoothGattCharacteristic,
             status: Int
         ) {
-            if (CLIENT_CHARACTERISTIC_CONFIG.equals(characteristic.uuid)) {
+
                 Log.w(
                     "BLE",
                     "CharacteristicRead - xaccel service uuid: " + characteristic.service.uuid
@@ -242,16 +226,26 @@ class MainActivity : AppCompatActivity() {
                         0
                     )
                 )
-            }
+
         }
 
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt?,
             characteristic: BluetoothGattCharacteristic
         ) {
-            Log.i("BLE", "Received characteristics changed event : " + characteristic.uuid)
-            if (CLIENT_CHARACTERISTIC_CONFIG.equals(characteristic.uuid)) {
-                Log.i("BLE", "Received new value for xAccel.")
+            Log.i(characteristic.uuid.toString(), "Received characteristics changed event : " )
+            if (characteristic.uuid.equals(GLUCOSE_CHARACTERISTIC)){
+                Log.d("need Characteristic!", "YAY")
+                val data = characteristic.value
+                if (data != null && data.size > 0) {
+                    val stringBuilder = StringBuilder(data.size)
+                    for (byteChar in data) stringBuilder.append(String.format("%02X ", byteChar))
+                    Log.d(stringBuilder.toString(),"asdasd")
+                }
+                if (data != null && data.size > 0) {
+                    val readings = GlucoseReadings(data)
+                    Log.i("result is ", readings.toString())
+                }
             }
         }
 
@@ -260,6 +254,13 @@ class MainActivity : AppCompatActivity() {
             characteristic: BluetoothGattCharacteristic?,
             status: Int
         ) {
+            Log.i("BLE", "CHARACTERISTIC WRITE event : " + characteristic?.uuid + " " + status)
+            Log.d("GATT_STATUS - ", (status == BluetoothGatt.GATT_SUCCESS).toString())
+            val data = characteristic!!.value
+            if (data != null && data.size > 0) {
+                val stringBuilder = StringBuilder(data.size)
+                for (byteChar in data) stringBuilder.append(String.format("%02X ", byteChar))
+            }
         }
 
         override fun onDescriptorRead(
@@ -274,7 +275,50 @@ class MainActivity : AppCompatActivity() {
             descriptor: BluetoothGattDescriptor?,
             status: Int
         ) {
-            val q = 7
+            val parentCharacteristic = descriptor?.characteristic
+            if(status!= BluetoothGatt.GATT_SUCCESS) {
+                Log.d("DesciprotWrite","Failed");
+            }
+            else {
+
+                if (parentCharacteristic?.uuid == GLUCOSE_CHARACTERISTIC) {
+                    val charContextGM =
+                        gatt?.getService(UUID.fromString("00001808-0000-1000-8000-00805f9b34fb"))
+                            ?.getCharacteristic(CONTEXT_CHARACTERISTIC)
+                    gatt?.setCharacteristicNotification(charContextGM, true)
+
+                    val descContextGM =
+                        charContextGM?.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
+                    descContextGM?.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                    val flag = gatt?.writeDescriptor(descContextGM) // false
+                    Log.d("Glucose Context desc", flag.toString())
+                } else if (parentCharacteristic?.uuid == CONTEXT_CHARACTERISTIC) {
+                    val charRACP =
+                        gatt?.getService(UUID.fromString("00001808-0000-1000-8000-00805f9b34fb"))
+                            ?.getCharacteristic(RECORDS_CHARACTERISTIC)
+                    gatt?.setCharacteristicNotification(charRACP, true)
+                    val descRACP =
+                        charRACP?.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
+                    descRACP?.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                    val flag = gatt?.writeDescriptor(descRACP)
+                    Log.d("Records Context desc", flag.toString())
+                } else if (parentCharacteristic?.uuid == RECORDS_CHARACTERISTIC) {
+                    val value = descriptor?.value?.get(0)
+
+                    val writeRACPchar =
+                        gatt!!.getService(UUID.fromString("00001808-0000-1000-8000-00805f9b34fb"))
+                            .getCharacteristic(UUID.fromString("00002a52-0000-1000-8000-00805f9b34fb"))
+                    val data = ByteArray(2)
+                    data[0] = 0x01 // Report Stored records
+
+                    data[1] = 0x01 // Last record
+
+                    // writeRACPchar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+
+                    writeRACPchar.value = data
+                    val flag = gatt.writeCharacteristic(writeRACPchar)
+                }
+            }
         }
     }
 
@@ -301,8 +345,3 @@ class MainActivity : AppCompatActivity() {
         mBluetoothGatt?.close()
     }
 }
-
-
-
-
-
